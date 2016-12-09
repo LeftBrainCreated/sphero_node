@@ -1,0 +1,28 @@
+{
+  "name": "sphero_node",
+  "version": "1.0.0",
+  "description": "Javascript Integration with Sphero Smart Ball",
+  "main": "index.js",
+  "private": "true",
+  "scripts": {
+    "test": "runTest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LeftBrainCreated/sphero_node.git"
+  },
+  "keywords": [
+    "Sphero",
+    "SPRK"
+  ],
+  "author": "Randy Beal",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/LeftBrainCreated/sphero_node/issues"
+  },
+  "homepage": "https://github.com/LeftBrainCreated/sphero_node#readme",
+  "dependencies": {
+    "express": "^4.14.0",
+    "serialport": "^4.0.6"
+  }
+}
