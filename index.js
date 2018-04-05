@@ -2,44 +2,30 @@ require('serialport');
 
 var express = require('express');
 var bodyParser = require('body-parser');
-var player1Connected = false;
-var player2Connected = false;
-var player1InCalibrationMode = false;
-var player2InCalibrationMode = false;
+var connected = false;
+var inCalibrationMode = false;
 
 var app = express();
 
 app.use(bodyParser.urlencoded({extended: false}));
 app.use(bodyParser.json());
 
-var Sphero = require("sphero"),
-    player1Orb = Sphero("/COM9");
-    //player2Orb = Sphero("/COM9"); 
+var Sphero = require("sphero");
+var orb = Sphero("/COM9");
+var busy = false;
 
 try {
-    connectToSphero(player1Orb, 1, "blue");
-    //connectToSphero(player2Orb, 2, "purple");
+    connectToSphero(orb, "blue");
 } catch (err) {
     console.log('Could Not Connect To Sphero');
 }
 
 
-app.get('/connect/:player', function(req, res){
+app.get('/connect', function(req, res){
   res.setHeader('Content-Type', 'text/plain');
   console.log(req.body);
 
-  switch(req.params.player) {
-    case 1:
-      orb = player1Orb;
-      orbColor = "red";
-      break;
-    case 2:
-      orb = player2Orb;
-      orbColor = "blue";
-      break;
-    default:
-      exit;
-  }
+  orbColor = "blue";
 
   orb.connect(function(err, data) {
     if (null === err) {
@@ -47,6 +33,9 @@ app.get('/connect/:player', function(req, res){
 
       // turn on listener to detect collisions 
       orb.detectCollisions();
+      orb.setRotationRate(255, function(err, data) {
+        console.log(err || "data: " + data);
+      });
 
       // when Sphero detects a collision, turn red for a second, then back to green 
       orb.on("collision", function(data) {
@@ -60,26 +49,23 @@ app.get('/connect/:player', function(req, res){
         }, 400);
       });
 
-      res.write('Sphero ' + req.params.player + ' Connected');
-      player1Connected = true;
+      res.write('Sphero Connected');
+      connected = true;
       res.end();
     } else {
       res.write('Connection Failure: ' + err.message);
-      player1Connected = true;
+      connected = true;
       res.end();
     }
   });
 }).listen(9001);
 
 app.post('/setHeading', function(req, res){
-  var player = req.body.player; 
   var heading = req.body.direction;
 
-  if (PlayerIsConnected(player)) {
+  if (connected) {
     res.setHeader('Content-Type', 'text/plain');
     console.log('Set Header Request: ' + req.body);
-
-    orb = GetPlayersOrb(player);
 
     orb.roll(1, heading, 2, function() {
       setTimeout(function() {
@@ -93,14 +79,11 @@ app.post('/setHeading', function(req, res){
   }
 }); 
 
-app.get('/calibrate/:player', function(req, res){
-  var player = req.params.player;
-  if (PlayerIsConnected(player)) {
-    orb = GetPlayersOrb(player);
-
+app.get('/calibrate', function(req, res){
+  if (connected) {
     orb.startCalibration(function(err, data){
       if (!err){
-        SetPlayerCalibrationMode(player, true);
+        inCalibrationMode = true;
         res.setHeader('Content-Type', 'text/plain');
         res.write('Calibration Started');
         res.end();
@@ -109,14 +92,11 @@ app.get('/calibrate/:player', function(req, res){
   }
 }).listen(9000);
 
-app.get('/endCalibration/:player', function(req, res){
-  var player = req.params.player;
-  if (PlayerIsConnected(player)) {
-    orb = GetPlayersOrb(player);
-
+app.get('/endCalibration', function(req, res){
+  if (connected) {
     orb.finishCalibration(function(err, data){
       if (!err){
-        SetPlayerCalibrationMode(player, false);
+        inCalibrationMode = false;
         res.setHeader('Content-Type', 'text/plain');
         res.write('Calibration Ended');
         res.end();
@@ -125,25 +105,19 @@ app.get('/endCalibration/:player', function(req, res){
   }
 }).listen(9003);
 
-app.get('/disconnect/:player', function(req, res){
-  var orb = GetPlayersOrb(req.params.player);
+app.get('/disconnect', function(req, res){
   orb.disconnect(function(){
-    console.log('Sphero ' + player + ' Disconnected');
+    console.log('Sphero Disconnected');
 
     res.write('Sphero Disconnected');
-    //SetPlayerConnected(player, false);
     res.end();
   });
 }).listen(9002);
 
 app.post('/', function(req, res){
-  var player = req.body.player;
-
-  if (PlayerIsConnected(player)) {
+  if (connected) {
     res.setHeader('Content-Type', 'text/plain');
     console.log(req.body);
-
-    var orb = GetPlayersOrb(player);
 
     //set color
     // orb.randomColor(function(err, data) {
@@ -155,6 +129,7 @@ app.post('/', function(req, res){
 
     // roll Sphero forward 
     orb.roll(req.body.speed, req.body.direction);
+    // busy = true;
     
     res.write('Speed:' + req.body.speed + '\n');
     res.write('Direction:' + req.body.direction);
@@ -166,19 +141,17 @@ app.post('/', function(req, res){
     //   //   console.log(err || "data" + data);
     //   // });
     //   orb.roll(0, req.body.direction);
+    //   busy = false;
     // }, 500);
   }
 }); 
 
-app.get('/runMacro/:player/:macroId', function(req, res){
-  var player = req.params.player;
+app.get('/runMacro/:macroId', function(req, res){
   var macroId = req.params.macroId;
   
-  console.log('Player ' + player + ', Macro ' + macroId)
+  console.log('Macro ' + macroId)
 
-  if (PlayerIsConnected(player)) {
-    var orb = GetPlayersOrb(player);
-
+  if (connected) {
     // orb.runMacro(macroId, function(err, data){
     //   if (!err){
     //     res.setHeader('Content-Type', 'text/plain');
@@ -205,7 +178,7 @@ app.get('/runMacro/:player/:macroId', function(req, res){
   }
 }).listen(9004);
 
-function connectToSphero(orb, player, orbColor) {
+function connectToSphero(orb, orbColor) {
   orb.connect(function(err, data) {
     if (null === err) {
       console.log('Sphero Connected'); 
@@ -226,65 +199,7 @@ function connectToSphero(orb, player, orbColor) {
         // }, 400);
       });
 
-      switch (player) {
-        case 1:
-          player1Connected = true;
-          break;
-        case 2:
-          player2Connected = true;
-          break;
-        default:
-          break;
-      }
+      connected = true;
     }
   });
-}
-
-function GetPlayersOrb(player) {
-  switch(parseInt(player)) {
-    case 1:
-      orb = player1Orb;
-      break;
-    case 2:
-      orb = player2Orb;
-      break;
-    default:
-      break;
-  }
-  return orb;
-}
-
-function PlayerIsInCalibrationMode(player) {
-  switch(parseInt(player)) {
-    case 1:
-      return player1InCalibrationMode;
-    case 2:
-      return player2InCalibrationMode;
-    default:
-      break;
-  }
-}
-
-function PlayerIsConnected(player) {
-  switch(parseInt(player)) {
-    case 1:
-      return player1Connected;
-    case 2:
-      return player2Connected;
-    default:
-      break;
-  }
-}
-
-function SetPlayerCalibrationMode(player, value) {
-  switch(parseInt(player)) {
-    case 1:
-      player1InCalibrationMode = value;
-      break;
-    case 2:
-      player2InCalibrationMode = value;
-      break;
-    default:
-      break;
-  }
 }
