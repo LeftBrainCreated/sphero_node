@@ -2,6 +2,5 @@
 
 !!!Work In Progress!!!
 
-This is half of a project I'm putting together which will allow for me to send commands to a Sphero smart ball, using http POST calls.
-
-More detail to come.
+API to allow for specific commends for interacting with Sphero.
+Removed busy flag to allow for continuous command sends
